@@ -21,21 +21,52 @@ test_data = data['2021-08-01':'2022-05-31']  # Data from August 2021 to end of s
 exog_train = train_data[['opponent_strength']]
 exog_test = test_data[['opponent_strength']]
 
-#Run seasonal ARIMA model
-print("Model Running ... Please wait")
-model = SARIMAX(train_data['fulham_goals'], exog=exog_train, order=(2, 1, 2), seasonal_order=(1, 1, 1, 52))
-sarimax_result = model.fit()
-print("Model fitted successfully.")
-print(sarimax_result.summary())
 
-# Generate forecast for 36 weeks from August 2021
+# Define hyperparameter ranges
+p = d = q = range(0, 3)  # Autoregressive, differencing, and moving average orders
+P = D = Q = range(0, 2)  # Seasonal orders
+s = [40]  # Seasonal period 
+
+# Generate all possible combinations of hyperparameters
+parameters = list(itertools.product(p, d, q, P, D, Q, s))
+
+# Track the best model
+best_aic = float('inf')
+best_params = None
+best_model = None
+
+# Grid search over different parameter combinations
+for param in parameters:
+    try:
+        
+        order = (param[0], param[1], param[2])
+        seasonal_order = (param[3], param[4], param[5], param[6])
+        
+        # Define SARIMAX model
+        model = SARIMAX(train_data['fulham_goals'], exog=exog_train, order=order, seasonal_order=seasonal_order)
+        result = model.fit(disp=False)
+        
+        # Check if current model has the lowest AIC
+        if result.aic < best_aic:
+            best_aic = result.aic
+            best_params = param
+            best_model = result
+            
+        
+    
+    except Exception as e:
+        print(f"Failed to fit SARIMAX{order}x{seasonal_order}. Error: {e}")
+        continue
+
+# Generate future dates starting from August 1, 2021 for indexing
+
+print(f"\nBest SARIMAX{(best_params[0], best_params[1], best_params[2])}x{(best_params[3], best_params[4], best_params[5], best_params[6])} - AIC:{best_aic}")
+
 print("Generating forecast for 36 weeks from August 2021...")
-future_forecast = sarimax_result.get_forecast(steps=36, exog=exog_test)  # Forecast for 36 weeks
+future_forecast = best_model.get_forecast(steps=36, exog=exog_test)  # Forecast for 36 weeks
 forecast_values = future_forecast.predicted_mean
 conf_int = future_forecast.conf_int()
 
-
-# Generate future dates starting from August 1, 2021 for indexing
 future_index = pd.date_range(start="2021-08-01", periods=36, freq='W')
 
 # Data visualisation:
